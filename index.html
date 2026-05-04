@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Turbo Race Online</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap');
+        body { font-family: 'Rajdhani', sans-serif; background: #050505; color: #fff; overflow: hidden; }
+        .retro-font { font-family: 'Press+Start+2P', cursive; }
+        .neon-glow { text-shadow: 0 0 10px #3b82f6, 0 0 20px #3b82f6; }
+        .btn-gradient { background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); }
+        .overlay { background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); }
+        #canvas-container { position: relative; width: 100%; height: 100vh; }
+        .speed-bar { height: 4px; transition: width 0.1s; }
+    </style>
+</head>
+<body class="antialiased">
+    
+    <div id="app" class="relative w-full h-screen overflow-hidden">
+        <!-- Main UI -->
+        <div id="main-menu" class="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 space-y-8 bg-[#0a0a0c]">
+            <div class="text-center">
+                <h1 class="text-6xl font-bold italic tracking-tighter text-blue-500 neon-glow">TURBO RACE</h1>
+                <p class="text-slate-400 mt-2">ULTIMATE RACING CHALLENGE</p>
+            </div>
+
+            <div class="w-full max-w-sm space-y-4">
+                <button onclick="showTracks()" class="w-full btn-gradient py-5 rounded-2xl font-bold text-xl flex items-center justify-center gap-3 active:scale-95 transition shadow-lg shadow-blue-500/20">
+                    <i data-lucide="play"></i> ОДИНОЧНЫЙ ЗАЕЗД
+                </button>
+                <button onclick="showMultiplayer()" class="w-full bg-slate-800 hover:bg-slate-700 py-5 rounded-2xl font-bold text-xl flex items-center justify-center gap-3 active:scale-95 transition">
+                    <i data-lucide="users"></i> ИГРАТЬ С ДРУЗЬЯМИ
+                </button>
+                <button onclick="fetchLeaderboard()" class="w-full bg-slate-900 border border-slate-700 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 active:scale-95 transition">
+                    <i data-lucide="award"></i> ТАБЛИЦА ЛИДЕРОВ
+                </button>
+            </div>
+        </div>
+
+        <!-- Track Selection -->
+        <div id="track-menu" class="hidden absolute inset-0 z-20 flex flex-col items-center justify-center p-6 overlay">
+            <h2 class="text-3xl font-bold mb-8">ВЫБЕРИ ТРАССУ</h2>
+            <div class="grid grid-cols-1 gap-4 w-full max-w-sm">
+                <div onclick="selectTrack('city')" class="p-6 bg-slate-800 rounded-2xl border-l-8 border-cyan-500 cursor-pointer hover:bg-slate-700 transition">
+                    <h3 class="text-xl font-bold">🌆 Ночной Токио</h3>
+                    <p class="text-slate-400 text-sm">Легкая трасса • 2000м</p>
+                </div>
+                <div onclick="selectTrack('desert')" class="p-6 bg-slate-800 rounded-2xl border-l-8 border-orange-500 cursor-pointer hover:bg-slate-700 transition">
+                    <h3 class="text-xl font-bold">🏜 Гранд Каньон</h3>
+                    <p class="text-slate-400 text-sm">Средняя • 3500м</p>
+                </div>
+                <div onclick="selectTrack('arctic')" class="p-6 bg-slate-800 rounded-2xl border-l-8 border-blue-200 cursor-pointer hover:bg-slate-700 transition">
+                    <h3 class="text-xl font-bold">❄️ Арктический Лед</h3>
+                    <p class="text-slate-400 text-sm">Сложная • 5000м</p>
+                </div>
+                <button onclick="hideAll()" class="mt-4 text-slate-500">Назад в меню</button>
+            </div>
+        </div>
+
+        <!-- Multiplayer Modal -->
+        <div id="multiplayer-menu" class="hidden absolute inset-0 z-20 flex flex-col items-center justify-center p-6 overlay">
+            <div class="w-full max-w-sm bg-slate-900 p-8 rounded-3xl border border-slate-800">
+                <h2 class="text-2xl font-bold mb-6 text-center">МУЛЬТИПЛЕЕР</h2>
+                <div class="space-y-4">
+                    <button onclick="createRoom()" class="w-full bg-blue-600 py-4 rounded-xl font-bold">СОЗДАТЬ КОМНАТУ</button>
+                    <div class="flex gap-2">
+                        <input id="room-code-input" type="text" placeholder="Код" class="bg-slate-800 w-full px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase font-mono">
+                        <button onclick="joinRoom()" class="bg-green-600 px-6 py-4 rounded-xl font-bold">ВХОД</button>
+                    </div>
+                </div>
+                <button onclick="hideAll()" class="w-full mt-8 text-slate-500">Отмена</button>
+            </div>
+        </div>
+
+        <!-- Leaderboard Modal -->
+        <div id="leaderboard-menu" class="hidden absolute inset-0 z-30 flex flex-col items-center justify-center p-6 overlay">
+            <div class="w-full max-w-sm bg-slate-900 h-[60vh] flex flex-col rounded-3xl border border-slate-800">
+                <div class="p-6 border-b border-slate-800 flex justify-between items-center">
+                    <h2 class="text-2xl font-bold">ЛИДЕРЫ</h2>
+                    <button onclick="hideAll()"><i data-lucide="x"></i></button>
+                </div>
+                <div id="leaderboard-list" class="flex-1 overflow-y-auto p-6 space-y-4">
+                    <!-- Rows go here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- HUD -->
+        <div id="hud" class="hidden absolute inset-x-0 top-0 z-40 p-6 pointer-events-none flex flex-col gap-2">
+            <div class="flex justify-between items-center">
+                <div class="text-2xl retro-font">
+                    <span id="hud-dist">0</span><span class="text-xs ml-1">М</span>
+                </div>
+                <div class="text-right">
+                    <div class="text-2xl retro-font text-yellow-400"><span id="hud-speed">0</span></div>
+                    <div class="text-[10px] opacity-50">КМ/Ч</div>
+                </div>
+            </div>
+            <div class="w-full bg-slate-800/50 rounded-full overflow-hidden">
+                <div id="speed-bar" class="speed-bar w-0 bg-blue-500"></div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls" class="hidden absolute inset-x-0 bottom-0 z-40 p-10 flex justify-center items-center pointer-events-none">
+            <button id="gas-pedal" class="pointer-events-auto w-24 h-24 bg-red-600 rounded-full border-4 border-red-900/50 flex items-center justify-center active:scale-90 active:bg-red-500 transition-all shadow-2xl">
+                <i data-lucide="zap" class="w-10 h-10 fill-white"></i>
+            </button>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.headerColor = '#0a0a0c';
+        lucide.createIcons();
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let gameLoop = null;
+        let gameState = {
+            active: false,
+            speed: 0,
+            distance: 0,
+            maxDistance: 2000,
+            track: 'city',
+            obstacles: [],
+            offset: 0
+        };
+
+        function hideAll() {
+            ['main-menu', 'track-menu', 'multiplayer-menu', 'leaderboard-menu', 'hud', 'controls'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById('main-menu').classList.remove('hidden');
+            gameState.active = false;
+        }
+
+        function showTracks() {
+            hideAll();
+            document.getElementById('main-menu').classList.add('hidden');
+            document.getElementById('track-menu').classList.remove('hidden');
+        }
+
+        function showMultiplayer() {
+            hideAll();
+            document.getElementById('main-menu').classList.add('hidden');
+            document.getElementById('multiplayer-menu').classList.remove('hidden');
+        }
+
+        function fetchLeaderboard() {
+            fetch('/api/leaderboard').then(r => r.json()).then(data => {
+                const list = document.getElementById('leaderboard-list');
+                list.innerHTML = data.map((u, i) => `
+                    <div class="flex justify-between items-center bg-slate-800/50 p-4 rounded-xl">
+                        <span class="font-bold">${i+1}. ${u.name}</span>
+                        <span class="text-blue-400 font-bold">${u.wins} 🏆</span>
+                    </div>
+                `).join('');
+                document.getElementById('leaderboard-menu').classList.remove('hidden');
+            });
+        }
+
+        function selectTrack(type) {
+            gameState.track = type;
+            gameState.maxDistance = type === 'city' ? 2000 : type === 'desert' ? 3500 : 5000;
+            startEngine();
+        }
+
+        function startEngine() {
+            hideAll();
+            document.getElementById('main-menu').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('controls').classList.remove('hidden');
+            
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            gameState.active = true;
+            gameState.distance = 0;
+            gameState.speed = 0;
+            update();
+        }
+
+        // Game Physics
+        let gasPressed = false;
+        const gasBtn = document.getElementById('gas-pedal');
+        gasBtn.addEventListener('touchstart', (e) => { e.preventDefault(); gasPressed = true; tg.HapticFeedback.impactOccurred('medium'); });
+        gasBtn.addEventListener('touchend', () => { gasPressed = false; });
+
+        function update() {
+            if (!gameState.active) return;
+
+            if (gasPressed) {
+                gameState.speed += 1.5;
+            } else {
+                gameState.speed *= 0.98;
+            }
+
+            if (gameState.speed > 280) gameState.speed = 280;
+            if (gameState.speed < 0) gameState.speed = 0;
+
+            gameState.distance += gameState.speed / 60;
+            gameState.offset += gameState.speed / 10;
+
+            // Update UI
+            document.getElementById('hud-dist').innerText = Math.floor(gameState.distance);
+            document.getElementById('hud-speed').innerText = Math.floor(gameState.speed);
+            document.getElementById('speed-bar').style.width = (gameState.speed / 280 * 100) + '%';
+
+            render();
+
+            if (gameState.distance >= gameState.maxDistance) {
+                finish();
+            } else {
+                requestAnimationFrame(update);
+            }
+        }
+
+        function render() {
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            // Background
+            let color = '#1a1a2e';
+            if (gameState.track === 'desert') color = '#451a03';
+            if (gameState.track === 'arctic') color = '#0c4a6e';
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, w, h);
+
+            // Road
+            ctx.fillStyle = '#111';
+            ctx.beginPath();
+            ctx.moveTo(w*0.2, h);
+            ctx.lineTo(w*0.4, h*0.4);
+            ctx.lineTo(w*0.6, h*0.4);
+            ctx.lineTo(w*0.8, h);
+            ctx.fill();
+
+            // Lines
+            ctx.strokeStyle = '#fff';
+            ctx.setLineDash([40, 40]);
+            ctx.lineDashOffset = -gameState.offset;
+            ctx.beginPath();
+            ctx.moveTo(w/2, h);
+            ctx.lineTo(w/2, h*0.4);
+            ctx.stroke();
+
+            // Player Car (Simple Rect for demo)
+            ctx.fillStyle = '#3b82f6';
+            const carW = 60;
+            const carH = 100;
+            ctx.fillRect(w/2 - carW/2, h - 150, carW, carH);
+            
+            // Neon Lights (City)
+            if (gameState.track === 'city') {
+                ctx.fillStyle = '#ef4444';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#ef4444';
+                ctx.fillRect(w/2 - carW/2 + 5, h - 60, 15, 5);
+                ctx.fillRect(w/2 + carW/2 - 20, h - 60, 15, 5);
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        function finish() {
+            gameState.active = false;
+            tg.HapticFeedback.notificationOccurred('success');
+            
+            fetch('/api/finish-race', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    username: tg.initDataUnsafe.user?.first_name || 'Racer',
+                    win: true
+                })
+            }).then(() => {
+                alert('ФИНИШ! Вы победили!');
+                hideAll();
+            });
+        }
+
+        function createRoom() {
+            fetch('/api/create-room', {method: 'POST'})
+                .then(r => r.json())
+                .then(data => {
+                    tg.showPopup({ title: 'Комната создана', message: 'Код: ' + data.roomId });
+                    selectTrack('city');
+                });
+        }
+
+        function joinRoom() {
+            const code = document.getElementById('room-code-input').value;
+            if (!code) return;
+            fetch('/api/join-room', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ roomId: code.toUpperCase() })
+            }).then(r => r.ok ? selectTrack('city') : alert('Комната не найдена'));
+        }
+    </script>
+</body>
+</html>
